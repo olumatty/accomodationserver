@@ -13,54 +13,75 @@ app.use(cors());
 
 app.get('/get_accommodation', async (req, res) => {
     try {
-        const destination = req.query.destination || req.body.destination; 
+        const { destination, checkInDate, checkOutDate } = req.query || req.body;
 
-        if (!destination) {
-            return res.status(400).json({ error: "Destination is required" });
+        if (!destination || !checkInDate || !checkOutDate) {
+            return res.status(400).json({ error: "destination, checkInDate, checkOutDate are required" });
         }
 
-        const options = {
+        // First API call to get geoId based on the destination
+        const geoResponse = await axios({
             method: 'GET',
-            url: 'https://real-time-tripadvisor-scraper-api.p.rapidapi.com/tripadvisor_hotels_search_v2', 
+            url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchLocation',
             headers: {
                 'content-type': 'application/json',
                 'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
-                'X-RapidAPI-Host': 'real-time-tripadvisor-scraper-api.p.rapidapi.com'
+                'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
             },
-            params: { location: destination } 
-        };
+            params: { query: destination }
+        });
 
-        const response = await axios.request(options);
+        const locationData = geoResponse.data.data[0];
+        const geoId = locationData?.geoId
 
-        if (!response.data || !response.data.data || !Array.isArray(response.data.data)) {
-            return res.status(404).json({ 
-                error: "No accommodation data found", 
-                apiResponse: response.data 
+        if (!geoId) {
+            return res.status(404).json({ error: "No location found for the given destination" });
+        }
+
+        // Second API call to fetch hotels using geoId
+        const hotelResponse = await axios({
+            method: 'GET',
+            url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchHotels',
+            headers: {
+                'content-type': 'application/json',
+                'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
+                'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
+            },
+            params: { geoId, checkIn: checkInDate, checkOut: checkOutDate }
+        });
+
+
+        let results = hotelResponse.data?.data?.data;
+
+        if (!Array.isArray(results)) {
+            console.error("Error: hotelResponse.data.data is not an array:", results);
+            return res.status(500).json({
+                error: "Failed to process accommodation details",
+                details: "Expected hotel data to be an array but it was not.",
+                apiResponse: hotelResponse.data
             });
         }
 
-        const results = response.data.data;
-
-        const structuredResults = results.map((hotel) => ({
-            name: hotel.name || "N/A",
-            city: hotel.address?.city || "N/A",
-            fullAddress: hotel.address?.fullAddress || "N/A",
-            amenities: hotel.amenities || [],
-            phone: hotel.contacts?.phone || "N/A",
-            website: hotel.contacts?.website || "N/A",
-            link: hotel.contact?.link || "N/A",
-            price: {
-                min: hotel.price?.priceMin || "N/A",
-                max: hotel.price?.priceMax || "N/A",
-                currency: hotel.price?.currency || "USD"
-            },
-            rating: hotel.rating?.total || "N/A",
+        const structuredResults = results.map((data) => ({
+            hotelName: data.title.replace(/^\d+\.\s*/, '').trimStart(),
+            decription : data.secondaryInfo,
+            price: data.commerceInfo?.priceForDisplay?.text,
+            provider: data.provider,
+            rating: data.bubbleRating?.rating,
+            urlTemplate: data.detailPageUrl,
+            externalUrl: data.commerceInfo?.externalUrl,
+            photourlTemplate: data.cardPhotos?.[0]?.sizes?.urlTemplate,
         }));
 
+        const topResults = structuredResults
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 4);
+
+        // Sending the extracted accommodation data in the response
         res.status(200).json({
             agent: 'Bob',
-            extractedInfo: destination,
-            accommodation: structuredResults
+            extractedInfo: { destination, checkInDate, checkOutDate },
+            accommodation: topResults,
         });
 
     } catch (error) {
@@ -68,8 +89,8 @@ app.get('/get_accommodation', async (req, res) => {
         if (error.response) {
             console.error("API Error Details:", error.response.status, error.response.data);
         }
-        res.status(500).json({ 
-            error: "Failed to fetch accommodation details", 
+        res.status(500).json({
+            error: "Failed to fetch accommodation details",
             details: error.message,
             apiError: error.response?.data || "No additional details"
         });
