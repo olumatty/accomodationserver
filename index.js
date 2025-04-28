@@ -11,50 +11,92 @@ const PORT = 8002;
 app.use(express.json());
 app.use(cors());
 
-app.get('/v1/get_accommodation', async (req, res) => {
+pp.get('/v1/get_accommodation', async (req, res) => {
     console.log("Accommodation Agent: Received request.");
-    // Add this log here to see the value when the route is hit on Render
     console.log("Accommodation Agent: HOTEL_API_KEY length (in route):", process.env.HOTEL_API_KEY ? process.env.HOTEL_API_KEY.length : 'Not set');
 
     try {
         const { destination, checkInDate, checkOutDate } = req.query || req.body;
 
+        console.log("Accommodation Agent: Searching for destination:", destination);
+
         if (!destination || !checkInDate || !checkOutDate) {
             return res.status(400).json({ error: "destination, checkInDate, checkOutDate are required" });
         }
 
-        // First API call to get geoId based on the destination
-        console.log("Accommodation Agent: Calling TripAdvisor searchLocation API...");
-        const geoResponse = await axios({
-            method: 'GET',
-            url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchLocation',
-            headers: {
-                'content-type': 'application/json',
-                'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
-                'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
-            },
-            params: { query: destination }
-        });
-        console.log("Accommodation Agent: Received response from searchLocation API.");
+        // --- Add specific try...catch for the first API call ---
+        let geoResponse;
+        try {
+            console.log("Accommodation Agent: Calling TripAdvisor searchLocation API...");
+             geoResponse = await axios({
+                method: 'GET',
+                url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchLocation',
+                headers: {
+                    'content-type': 'application/json',
+                    'X-RapidAPI-Key': process.env.HOTEL_API_KEY, // Using the env variable
+                    'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
+                },
+                params: { query: destination }
+            });
+            console.log("Accommodation Agent: Received response from searchLocation API. Status:", geoResponse.status);
+            // Log part of the geoResponse data to confirm structure
+            console.log("Accommodation Agent: searchLocation Response Data (first 500 chars):", JSON.stringify(geoResponse.data, null, 2).substring(0, 500));
 
-        const locationData = geoResponse.data.data[0];
+
+        } catch (geoError) {
+            console.error("--- Error during TripAdvisor searchLocation API call ---");
+            console.error("Accommodation Agent: Error calling searchLocation API:", geoError.message);
+            if (geoError.response) {
+                console.error("Accommodation Agent: searchLocation API Error Status:", geoError.response.status);
+                console.error("Accommodation Agent: searchLocation API Error Details:", geoError.response.data);
+            }
+             // Re-throw the error so the main catch block can handle the 500 response
+            throw geoError;
+        }
+        // --- End specific try...catch ---
+
+
+        const locationData = geoResponse.data.data?.[0]; // Use optional chaining defensively
         const geoId = locationData?.geoId
 
+        console.log("Accommodation Agent: Extracted geoId:", geoId);
+
+
         if (!geoId) {
+            console.error("Accommodation Agent: No geoId found for destination:", destination);
             return res.status(404).json({ error: "No location found for the given destination" });
         }
 
-        // Second API call to fetch hotels using geoId
-        const hotelResponse = await axios({
-            method: 'GET',
-            url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchHotels',
-            headers: {
-                'content-type': 'application/json',
-                'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
-                'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
-            },
-            params: { geoId, checkIn: checkInDate, checkOut: checkOutDate }
-        });
+        // --- Add specific try...catch for the second API call ---
+        let hotelResponse;
+        try {
+            console.log("Accommodation Agent: Calling TripAdvisor searchHotels API...");
+             hotelResponse = await axios({
+                method: 'GET',
+                url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchHotels',
+                headers: {
+                    'content-type': 'application/json',
+                    'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
+                    'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
+                },
+                params: { geoId, checkIn: checkInDate, checkOut: checkOutDate }
+            });
+            console.log("Accommodation Agent: Received response from searchHotels API. Status:", hotelResponse.status);
+             // Log part of the hotelResponse data
+            console.log("Accommodation Agent: searchHotels Response Data (first 500 chars):", JSON.stringify(hotelResponse.data, null, 2).substring(0, 500));
+
+
+        } catch (hotelError) {
+             console.error("--- Error during TripAdvisor searchHotels API call ---");
+            console.error("Accommodation Agent: Error calling searchHotels API:", hotelError.message);
+            if (hotelError.response) {
+                console.error("Accommodation Agent: searchHotels API Error Status:", hotelError.response.status);
+                console.error("Accommodation Agent: searchHotels API Error Details:", hotelError.response.data);
+            }
+            // Re-throw the error
+            throw hotelError;
+        }
+        // --- End specific try...catch ---
 
 
         let results = hotelResponse.data?.data?.data;
@@ -67,6 +109,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
                 apiResponse: hotelResponse.data
             });
         }
+
 
         const structuredResults = results.map((data) => {
             const photoTemplate = data.cardPhotos?.[0]?.sizes?.urlTemplate;
@@ -99,14 +142,22 @@ app.get('/v1/get_accommodation', async (req, res) => {
             accommodation: topResults,
         });
 
-    } catch (error) {
-        console.error("Error fetching accommodation details", error.message);
+    } catch (error) { // This is the main catch block
+        console.error("--- Unhandled Error in Accommodation Agent Route ---");
+        console.error("Accommodation Agent: Unexpected Error:", error.message);
         if (error.response) {
-            console.error("API Error Details:", error.response.status, error.response.data);
+             // This part might not always be hit if the crash happens mid-axios
+            console.error("Accommodation Agent: Unexpected Error API Status:", error.response.status);
+            console.error("Accommodation Agent: Unexpected Error API Details:", error.response.data);
         }
+        // Log the full stack trace for unhandled errors
+        console.error("Accommodation Agent: Unexpected Error Stack:", error.stack);
+
         res.status(500).json({
-            error: "Failed to fetch accommodation details",
+            error: "An internal error occurred in the accommodation agent",
             details: error.message,
+             // Include stack in details for debugging, remove for production
+            stack: error.stack,
             apiError: error.response?.data || "No additional details"
         });
     }
