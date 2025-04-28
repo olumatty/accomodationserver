@@ -11,7 +11,7 @@ const PORT = 8002;
 app.use(express.json());
 app.use(cors());
 
-pp.get('/v1/get_accommodation', async (req, res) => {
+app.get('/v1/get_accommodation', async (req, res) => {
     console.log("Accommodation Agent: Received request.");
     console.log("Accommodation Agent: HOTEL_API_KEY length (in route):", process.env.HOTEL_API_KEY ? process.env.HOTEL_API_KEY.length : 'Not set');
 
