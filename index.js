@@ -12,6 +12,10 @@ app.use(express.json());
 app.use(cors());
 
 app.get('/v1/get_accommodation', async (req, res) => {
+    console.log("Accommodation Agent: Received request.");
+    // Add this log here to see the value when the route is hit on Render
+    console.log("Accommodation Agent: HOTEL_API_KEY length (in route):", process.env.HOTEL_API_KEY ? process.env.HOTEL_API_KEY.length : 'Not set');
+
     try {
         const { destination, checkInDate, checkOutDate } = req.query || req.body;
 
@@ -20,6 +24,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
         }
 
         // First API call to get geoId based on the destination
+        console.log("Accommodation Agent: Calling TripAdvisor searchLocation API...");
         const geoResponse = await axios({
             method: 'GET',
             url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchLocation',
@@ -30,6 +35,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
             },
             params: { query: destination }
         });
+        console.log("Accommodation Agent: Received response from searchLocation API.");
 
         const locationData = geoResponse.data.data[0];
         const geoId = locationData?.geoId
