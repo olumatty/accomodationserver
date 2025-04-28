@@ -24,67 +24,23 @@ app.get('/v1/get_accommodation', async (req, res) => {
             return res.status(400).json({ error: "destination, checkInDate, checkOutDate are required" });
         }
 
-        // --- Add specific try...catch for the first API call ---
-        let geoResponse;
-        try {
-            console.log("Accommodation Agent: Calling TripAdvisor searchLocation API...");
-             geoResponse = await axios({
-                method: 'GET',
-                url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchLocation',
-                headers: {
-                    'content-type': 'application/json',
-                    'X-RapidAPI-Key': process.env.HOTEL_API_KEY, // Using the env variable
-                    'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
-                },
-                params: { query: destination }
-            });
-            console.log("Accommodation Agent: Received response from searchLocation API. Status:", geoResponse.status);
-            // Log part of the geoResponse data to confirm structure
-            console.log("Accommodation Agent: searchLocation Response Data (first 500 chars):", JSON.stringify(geoResponse.data, null, 2).substring(0, 500));
-
-
-        } catch (geoError) {
-            console.error("--- Error during TripAdvisor searchLocation API call ---");
-            console.error("Accommodation Agent: Error calling searchLocation API:", geoError.message);
-            if (geoError.response) {
-                console.error("Accommodation Agent: searchLocation API Error Status:", geoError.response.status);
-                console.error("Accommodation Agent: searchLocation API Error Details:", geoError.response.data);
-            }
-             // Re-throw the error so the main catch block can handle the 500 response
-            throw geoError;
-        }
-        // --- End specific try...catch ---
-
-
-        const locationData = geoResponse.data.data?.[0]; // Use optional chaining defensively
-        const geoId = locationData?.geoId
-
-        console.log("Accommodation Agent: Extracted geoId:", geoId);
-
-
-        if (!geoId) {
-            console.error("Accommodation Agent: No geoId found for destination:", destination);
-            return res.status(404).json({ error: "No location found for the given destination" });
-        }
 
         // --- Add specific try...catch for the second API call ---
         let hotelResponse;
         try {
-            console.log("Accommodation Agent: Calling TripAdvisor searchHotels API...");
-             hotelResponse = await axios({
+            const hotelResponse = await axios({
                 method: 'GET',
-                url: 'https://tripadvisor16.p.rapidapi.com/api/v1/hotels/searchHotels',
+                url: 'https://hoteldiscoveryapi.p.rapidapi.com/api/hotels/destination/search', 
                 headers: {
-                    'content-type': 'application/json',
-                    'X-RapidAPI-Key': process.env.HOTEL_API_KEY,
-                    'X-RapidAPI-Host': 'tripadvisor16.p.rapidapi.com'
+                    'x-rapidapi-key': process.env.HOTEL_API_KEY, 
+                    'x-rapidapi-host': 'hoteldiscoveryapi.p.rapidapi.com' 
                 },
-                params: { geoId, checkIn: checkInDate, checkOut: checkOutDate }
-            });
-            console.log("Accommodation Agent: Received response from searchHotels API. Status:", hotelResponse.status);
-             // Log part of the hotelResponse data
-            console.log("Accommodation Agent: searchHotels Response Data (first 500 chars):", JSON.stringify(hotelResponse.data, null, 2).substring(0, 500));
-
+                params: {
+                    q: destination,
+                    check_in_date: checkInDate,
+                    check_out_date: checkOutDate,
+                }
+            })
 
         } catch (hotelError) {
              console.error("--- Error during TripAdvisor searchHotels API call ---");
@@ -99,7 +55,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
         // --- End specific try...catch ---
 
 
-        let results = hotelResponse.data?.data?.data;
+        let results = hotelResponse.data?.properties;
 
         if (!Array.isArray(results)) {
             console.error("Error: hotelResponse.data.data is not an array:", results);
@@ -111,24 +67,20 @@ app.get('/v1/get_accommodation', async (req, res) => {
         }
 
 
-        const structuredResults = results.map((data) => {
-            const photoTemplate = data.cardPhotos?.[0]?.sizes?.urlTemplate;
-            let imageUrl = null; // Initialize imageUrl as null
-
-            if (photoTemplate) {
-                imageUrl = photoTemplate.replace('{w}', '400').replace('{h}', '300');
-            }
+        const structuredResults = results.map((hotelData) => {
+            const name = hotelData.name;
+            const description = hotelData.description;
+            const price = hotelData.rate_per_night?.lowest;
+            const rating = hotelData.overall_rating;
+            const imageUrl = hotelData.images?.[0]?.thumbnail;
 
             return {
-                hotelName: data.title.replace(/^\d+\.\s*/, '').trimStart(),
-                description : data.secondaryInfo,
-                price: data.commerceInfo?.priceForDisplay?.text,
-                provider: data.provider,
-                rating: data.bubbleRating?.rating,
-                detailsPageUrl: data.detailPageUrl,
-                externalUrl: data.commerceInfo?.externalUrl,
+                hotelName: name,
+                description : description,
+                price: price,
+                rating: rating,
                 imageUrl: imageUrl,
-            };
+            }
         });
 
         const topResults = structuredResults
