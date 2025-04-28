@@ -26,9 +26,9 @@ app.get('/v1/get_accommodation', async (req, res) => {
 
 
         // --- Add specific try...catch for the second API call ---
-        let hotelResponse;
+    
         try {
-            const hotelResponse = await axios({
+            hotelResponse = await axios({
                 method: 'GET',
                 url: 'https://hoteldiscoveryapi.p.rapidapi.com/api/hotels/destination/search', 
                 headers: {
@@ -52,9 +52,6 @@ app.get('/v1/get_accommodation', async (req, res) => {
             // Re-throw the error
             throw hotelError;
         }
-        // --- End specific try...catch ---
-
-
         let results = hotelResponse.data?.properties;
 
         if (!Array.isArray(results)) {
@@ -73,6 +70,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
             const price = hotelData.rate_per_night?.lowest;
             const rating = hotelData.overall_rating;
             const imageUrl = hotelData.images?.[0]?.thumbnail;
+            const amenities = hotelData.amenities;
 
             return {
                 hotelName: name,
@@ -80,6 +78,7 @@ app.get('/v1/get_accommodation', async (req, res) => {
                 price: price,
                 rating: rating,
                 imageUrl: imageUrl,
+                amenities: amenities
             }
         });
 
