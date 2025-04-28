@@ -62,16 +62,25 @@ app.get('/v1/get_accommodation', async (req, res) => {
             });
         }
 
-        const structuredResults = results.map((data) => ({
-            hotelName: data.title.replace(/^\d+\.\s*/, '').trimStart(),
-            decription : data.secondaryInfo,
-            price: data.commerceInfo?.priceForDisplay?.text,
-            provider: data.provider,
-            rating: data.bubbleRating?.rating,
-            urlTemplate: data.detailPageUrl,
-            externalUrl: data.commerceInfo?.externalUrl,
-            photourlTemplate: data.cardPhotos?.[0]?.sizes?.urlTemplate,
-        }));
+        const structuredResults = results.map((data) => {
+            const photoTemplate = data.cardPhotos?.[0]?.sizes?.urlTemplate;
+            let imageUrl = null; // Initialize imageUrl as null
+
+            if (photoTemplate) {
+                imageUrl = photoTemplate.replace('{w}', '400').replace('{h}', '300');
+            }
+
+            return {
+                hotelName: data.title.replace(/^\d+\.\s*/, '').trimStart(),
+                description : data.secondaryInfo,
+                price: data.commerceInfo?.priceForDisplay?.text,
+                provider: data.provider,
+                rating: data.bubbleRating?.rating,
+                detailsPageUrl: data.detailPageUrl,
+                externalUrl: data.commerceInfo?.externalUrl,
+                imageUrl: imageUrl,
+            };
+        });
 
         const topResults = structuredResults
         .sort((a, b) => b.rating - a.rating)
