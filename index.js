@@ -112,6 +112,12 @@ app.get('/v1/get_accommodation', async (req, res) => {
     }
 });
 
+app.get('/test-log', (req, res) => {
+    console.log("--- TEST LOG ENDPOINT HIT ---");
+    res.status(200).send("Test log received");
+});
+
+
 app.listen(PORT, () => {
     console.log(`The server is running on port ${PORT}`);
 });
