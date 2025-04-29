@@ -6,10 +6,14 @@ const { default: axios } = require('axios');
 dotenv.config();
 
 const app = express();
-const PORT = 8002;
 
 app.use(express.json());
 app.use(cors());
+
+app.get('/health', (req, res) => {
+    console.log("Accommodation Agent: Health check requested");
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 app.get('/v1/get_accommodation', async (req, res) => {
     console.log("Accommodation Agent: Received request.");
@@ -120,6 +124,13 @@ app.get('/test-log', (req, res) => {
 });
 
 
-app.listen(PORT, () => {
-    console.log(`The server is running on port ${PORT}`);
+const PORT = process.env.PORT || 8002; // Use Render's PORT, 8002 as local fallback
+const HOST = '0.0.0.0'; // Bind to all network interfaces
+
+app.listen(PORT, HOST, () => {
+    console.log(`Accommodation Agent server listening on ${HOST}:${PORT}`);
+     console.log("Environment check:", {
+        HOTEL_API_KEY: process.env.HOTEL_API_KEY ? "set" : "missing",
+        PORT: process.env.PORT || "8002"
+    });
 });
