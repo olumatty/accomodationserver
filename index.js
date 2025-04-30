@@ -10,10 +10,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.get('/health', (req, res) => {
-    console.log("Accommodation Agent: Health check requested");
-    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
-});
+app.get('/api/v1/health', (req, res) => {
+    res.status(200).json({ status: 'OK', server: 'Bob', uptime: process.uptime() });
+  });
 
 app.get('/v1/get_accommodation', async (req, res) => {
     console.log("Accommodation Agent: Received request.");
